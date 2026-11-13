@@ -102,7 +102,7 @@ if not st.session_state.autenticado:
 
 # --- MÓDULO PRINCIPAL: REGISTRO DE FICHAS ---
 else:
-    # Barra lateral limpia solo para cerrar sesión y ver el usuario
+    # Barra lateral limpia para cerrar sesión
     st.sidebar.markdown(f"**Alumno:** `{st.session_state.acceso_alumno}`")
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.autenticado = False
@@ -113,22 +113,50 @@ else:
     st.title("📝 Registro de Ficha Emocional")
     st.write("Captura tus fichas una por una.")
 
-    # Cargar las emociones desde la base de datos ordenadas por su clave
+    # Cargar las emociones incluyendo la descripción desde la base de datos
     try:
         engine = obtener_conexion()
         with engine.connect() as connection:
             emisiones_query = text(
-                "SELECT idemocion, Emocion FROM Emocion ORDER BY idemocion"
+                "SELECT idemocion, Emocion, descripcion FROM Emocion ORDER BY idemocion"
             )
             resultado_emociones = connection.execute(emisiones_query).fetchall()
 
-            opciones_emociones = {
+            dict_emociones = {
+                row.idemocion: {
+                    "nombre": row.Emocion,
+                    "descripcion": (
+                        row.descripcion
+                        if row.descripcion
+                        else "Sin descripción disponible."
+                    ),
+                }
+                for row in resultado_emociones
+            }
+
+            opciones_select = {
                 f"{row.idemocion} - {row.Emocion}": row.idemocion
                 for row in resultado_emociones
             }
     except Exception as e:
         st.error(f"Error al cargar el catálogo de emociones: {e}")
-        opciones_emociones = {}
+        opciones_select = {}
+        dict_emociones = {}
+
+    if opciones_select:
+        # 1. El selector de emoción está FUERA del formulario para que responda de inmediato
+        emocion_seleccionada_texto = st.selectbox(
+            "Selecciona la emoción (Clave - Nombre):",
+            options=list(opciones_select.keys()),
+        )
+        idemocion_elegida = opciones_select[emocion_seleccionada_texto]
+
+        # 2. La descripción cambia al instante en cuanto mueven el selector
+        desc_actual = dict_emociones[idemocion_elegida]["descripcion"]
+        st.info(f"💡 **¿Qué significa esta emoción?:** {desc_actual}")
+    else:
+        idemocion_elegida = ""
+        st.warning("No se pudieron cargar las emociones de la base de datos.")
 
     # Usamos una clave dinámica basada en el contador para limpiar el formulario al recargar
     form_key = f"form_ficha_{st.session_state.fichas_guardadas}"
@@ -138,29 +166,16 @@ else:
             "Fecha correspondiente a la ficha", value=datetime.today()
         )
 
-        if opciones_emociones:
-            emocion_seleccionada_texto = st.selectbox(
-                "Selecciona la emoción (Clave - Nombre):",
-                options=list(opciones_emociones.keys()),
-            )
-            idemocion_elegida = opciones_emociones[emocion_seleccionada_texto]
-        else:
-            idemocion_elegida = ""
-            st.warning(
-                "No se pudieron cargar las emociones de la base de datos."
-            )
-
         motivo = st.text_area(
             "Motivo",
             placeholder="Describe brevemente el motivo...",
             max_chars=500,
         )
 
-        # Creamos dos columnas dentro del formulario para ubicar el contador opuesto al botón
+        # Contador en el extremo opuesto al botón de guardar
         col_contador, col_boton = st.columns([2, 1])
 
         with col_contador:
-            # Mostramos el avance actual de forma limpia en el extremo opuesto
             st.markdown(
                 f"📊 **Fichas guardadas:** `{st.session_state.fichas_guardadas} / 30`"
             )
